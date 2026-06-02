@@ -1,82 +1,81 @@
 <?php
 
 declare(strict_types=1);
+set_time_limit(600); // Sets timeout to 600 seconds
 
-use App\Application\Handlers\HttpErrorHandler;
-use App\Application\Handlers\ShutdownHandler;
-use App\Application\ResponseEmitter\ResponseEmitter;
-use App\Application\Settings\SettingsInterface;
 use DI\ContainerBuilder;
 use Slim\Factory\AppFactory;
-use Slim\Factory\ServerRequestCreatorFactory;
 
 require __DIR__ . '/../vendor/autoload.php';
 
-// Instantiate PHP-DI ContainerBuilder
+// Load environment
+$dotenv = Dotenv\Dotenv::createImmutable(__DIR__ . '/..');
+$dotenv->safeLoad();
+
+// Build DI Container
 $containerBuilder = new ContainerBuilder();
-
-if (false) { // Should be set to true in production
-	$containerBuilder->enableCompilation(__DIR__ . '/../var/cache');
-}
-
-// Set up settings
-$settings = require __DIR__ . '/../app/settings.php';
-$settings($containerBuilder);
-
-// Set up dependencies
-$dependencies = require __DIR__ . '/../app/dependencies.php';
-$dependencies($containerBuilder);
-
-// Set up repositories
-$repositories = require __DIR__ . '/../app/repositories.php';
-$repositories($containerBuilder);
-
-// Build PHP-DI Container instance
+$containerBuilder->addDefinitions(__DIR__ . '/../config/container.php');
 $container = $containerBuilder->build();
 
-// Instantiate the app
+// Create App
 AppFactory::setContainer($container);
 $app = AppFactory::create();
-$callableResolver = $app->getCallableResolver();
 
-// Register middleware
-$middleware = require __DIR__ . '/../app/middleware.php';
-$middleware($app);
-
-// Register routes
-$routes = require __DIR__ . '/../app/routes.php';
-$routes($app);
-
-/** @var SettingsInterface $settings */
-$settings = $container->get(SettingsInterface::class);
-
-$displayErrorDetails = $settings->get('displayErrorDetails');
-$logError = $settings->get('logError');
-$logErrorDetails = $settings->get('logErrorDetails');
-
-// Create Request object from globals
-$serverRequestCreator = ServerRequestCreatorFactory::create();
-$request = $serverRequestCreator->createServerRequestFromGlobals();
-
-// Create Error Handler
-$responseFactory = $app->getResponseFactory();
-$errorHandler = new HttpErrorHandler($callableResolver, $responseFactory);
-
-// Create Shutdown Handler
-$shutdownHandler = new ShutdownHandler($request, $errorHandler, $displayErrorDetails);
-register_shutdown_function($shutdownHandler);
-
-// Add Routing Middleware
+// Add middleware
 $app->addRoutingMiddleware();
-
-// Add Body Parsing Middleware
 $app->addBodyParsingMiddleware();
 
-// Add Error Middleware
-$errorMiddleware = $app->addErrorMiddleware($displayErrorDetails, $logError, $logErrorDetails);
-$errorMiddleware->setDefaultErrorHandler($errorHandler);
+// Error middleware
+$errorMiddleware = $app->addErrorMiddleware(
+    (bool)($_ENV['APP_DEBUG'] ?? false),
+    true,
+    true
+);
 
-// Run App & Emit Response
-$response = $app->handle($request);
-$responseEmitter = new ResponseEmitter();
-$responseEmitter->emit($response);
+$errorMiddleware->setDefaultErrorHandler(function ($request, $exception, $displayErrorDetails) use ($app) {
+    $payload = [
+        'success' => false,
+        'message' => $displayErrorDetails ? $exception->getMessage() : 'An error occurred',
+    ];
+    $response = $app->getResponseFactory()->createResponse(500);
+    $response->getBody()->write(json_encode($payload));
+    return $response->withHeader('Content-Type', 'application/json');
+});
+
+// ↓ CORS must be added LAST so it executes FIRST
+$app->add(function ($request, $handler) use ($app) {
+    $allowedOrigins = explode(',', $_ENV['CORS_ALLOWED_ORIGINS'] ?? 'http://localhost:4200');
+    $origin = $request->getHeaderLine('Origin');
+
+    if ($request->getMethod() === 'OPTIONS') {
+        $response = $app->getResponseFactory()->createResponse(200);
+        if (in_array($origin, $allowedOrigins)) {
+            $response = $response
+                ->withHeader('Access-Control-Allow-Origin', $origin)
+                ->withHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With')
+                ->withHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
+                ->withHeader('Access-Control-Allow-Credentials', 'true');
+        }
+        return $response;
+    }
+
+    $response = $handler->handle($request);
+
+    if (in_array($origin, $allowedOrigins)) {
+        $response = $response
+            ->withHeader('Access-Control-Allow-Origin', $origin)
+            ->withHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With')
+            ->withHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
+            ->withHeader('Access-Control-Allow-Credentials', 'true');
+    }
+
+    return $response;
+});
+
+// Wire PermissionMiddleware with DI container
+\App\Shared\Middleware\PermissionMiddleware::setContainer($container);
+
+// Register routes
+(require __DIR__ . '/../routes/api.php')($app);
+
+$app->run();

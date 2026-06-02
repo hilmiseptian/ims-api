@@ -1,42 +1,174 @@
-# Slim Framework 4 Skeleton Application
+# UAM Backend — Slim PHP 4
 
-[![Coverage Status](https://coveralls.io/repos/github/slimphp/Slim-Skeleton/badge.svg?branch=master)](https://coveralls.io/github/slimphp/Slim-Skeleton?branch=master)
+User Access Management REST API built with **Slim PHP 4**, **PostgreSQL**, and **JWT** authentication.
 
-Use this skeleton application to quickly setup and start working on a new Slim Framework 4 application. This application uses the latest Slim 4 with Slim PSR-7 implementation and PHP-DI container implementation. It also uses the Monolog logger.
+## Stack
+- PHP 8.2+
+- Slim PHP 4
+- PHP-DI 7 (Dependency Injection)
+- Firebase JWT 6
+- PostgreSQL
 
-This skeleton application was built for Composer. This makes setting up a new Slim Framework application quick and easy.
+## Quick Start
 
-## Install the Application
-
-Run this command from the directory in which you want to install your new Slim Framework application. You will require PHP 7.4 or newer.
-
+### 1. Install dependencies
 ```bash
-composer create-project slim/slim-skeleton [my-app-name]
+composer install
 ```
 
-Replace `[my-app-name]` with the desired directory name for your new application. You'll want to:
-
-* Point your virtual host document root to your new application's `public/` directory.
-* Ensure `logs/` is web writable.
-
-To run the application in development, you can run these commands 
-
+### 2. Configure environment
 ```bash
-cd [my-app-name]
-composer start
+cp .env.example .env
+# Edit .env with your DB credentials and JWT secret
 ```
 
-Or you can use `docker-compose` to run the app with `docker`, so you can run these commands:
+### 3. Create database
 ```bash
-cd [my-app-name]
-docker-compose up -d
-```
-After that, open `http://localhost:8080` in your browser.
-
-Run this command in the application directory to run the test suite
-
-```bash
-composer test
+psql -U postgres -c "CREATE DATABASE uam_db;"
 ```
 
-That's it! Now go build something cool.
+### 4. Run migrations
+```bash
+composer run migrate
+# or: php database/migrate.php
+```
+
+### 5. Seed data
+```bash
+composer run seed
+# or: php database/seed.php
+```
+
+### 6. Start server
+```bash
+composer run start
+# Runs on http://localhost:8080
+```
+
+---
+
+## Default Credentials
+
+| Username | Password     | Level       |
+|----------|-------------|-------------|
+| admin    | Admin123!   | Super Admin |
+| manager  | Password123! | Manager     |
+| staff    | Password123! | Staff       |
+
+---
+
+## API Endpoints
+
+### Authentication
+| Method | Endpoint         | Permission | Description          |
+|--------|------------------|------------|----------------------|
+| POST   | /api/auth/login  | Public     | Login, returns JWT   |
+| GET    | /api/auth/me     | Auth       | Current user + perms |
+| POST   | /api/auth/logout | Auth       | Logout (client-side) |
+
+### Users
+| Method | Endpoint          | Permission    |
+|--------|-------------------|---------------|
+| GET    | /api/users        | users.view    |
+| GET    | /api/users/{id}   | users.view    |
+| POST   | /api/users        | users.create  |
+| PUT    | /api/users/{id}   | users.update  |
+| DELETE | /api/users/{id}   | users.delete  |
+
+### Levels
+| Method | Endpoint          | Permission    |
+|--------|-------------------|---------------|
+| GET    | /api/levels       | levels.view   |
+| GET    | /api/levels/{id}  | levels.view   |
+| POST   | /api/levels       | levels.create |
+| PUT    | /api/levels/{id}  | levels.update |
+| DELETE | /api/levels/{id}  | levels.delete |
+
+### Pages
+| Method | Endpoint          | Permission    |
+|--------|-------------------|---------------|
+| GET    | /api/pages        | pages.view    |
+| GET    | /api/pages/{id}   | pages.view    |
+| POST   | /api/pages        | pages.create  |
+| PUT    | /api/pages/{id}   | pages.update  |
+| DELETE | /api/pages/{id}   | pages.delete  |
+
+### Permissions
+| Method | Endpoint                              | Permission         |
+|--------|---------------------------------------|--------------------|
+| GET    | /api/permissions/my                   | Auth only          |
+| GET    | /api/permissions/matrix               | permissions.view   |
+| GET    | /api/permissions/levels/{id}          | permissions.view   |
+| PUT    | /api/permissions/levels/{id}          | permissions.update |
+| GET    | /api/permissions/users/{id}           | permissions.view   |
+| PUT    | /api/permissions/users/{id}/additions | permissions.update |
+| PUT    | /api/permissions/users/{id}/exclusions| permissions.update |
+
+---
+
+## Permission Model
+
+Action-based permissions using dot-notation:
+
+```
+dashboard.view
+users.view | users.create | users.update | users.delete
+levels.view | levels.create | levels.update | levels.delete
+pages.view | pages.create | pages.update | pages.delete
+permissions.view | permissions.update
+```
+
+**Effective Permission Formula:**
+```
+Effective = (Level Permissions) + (User Additions) - (User Exclusions)
+```
+
+---
+
+## API Response Format
+
+**Success:**
+```json
+{ "success": true, "message": "...", "data": {} }
+```
+
+**Validation Error:**
+```json
+{ "success": false, "message": "Validation failed", "errors": {} }
+```
+
+**Unauthorized:**
+```json
+{ "success": false, "message": "Unauthorized" }
+```
+
+**Forbidden:**
+```json
+{ "success": false, "message": "Forbidden" }
+```
+
+---
+
+## Project Structure
+
+```
+app/
+├── Modules/
+│   ├── Auth/         (login, me)
+│   ├── User/         (CRUD)
+│   ├── Level/        (CRUD + soft delete)
+│   ├── Page/         (CRUD)
+│   └── Permission/   (matrix, level perms, user perms)
+├── Shared/
+│   ├── Database/     (PDO singleton)
+│   ├── Security/     (JwtService)
+│   ├── Middleware/   (AuthMiddleware, PermissionMiddleware)
+│   ├── Response/     (JsonResponse helper)
+│   └── Exceptions/   (custom exceptions)
+config/               (DI container)
+routes/               (api.php)
+database/
+├── migrations/       (schema SQL)
+└── seeds/            (seed SQL)
+public/               (entry point)
+```
