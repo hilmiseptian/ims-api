@@ -14,6 +14,12 @@ class LevelController
 {
     public function __construct(private readonly LevelService $levelService) {}
 
+    public function active(ServerRequestInterface $request, ResponseInterface $response): ResponseInterface
+    {
+        $levels = $this->levelService->getAllActive();
+        return JsonResponse::success($response, $levels, 'Active levels retrieved');
+    }
+
     public function index(ServerRequestInterface $request, ResponseInterface $response): ResponseInterface
     {
         $params     = $request->getQueryParams();

@@ -1,4 +1,5 @@
 <?php
+// routes/api.php  — complete file
 
 declare(strict_types=1);
 
@@ -16,80 +17,66 @@ use Slim\Routing\RouteCollectorProxy;
 return function (App $app): void {
     $app->group('/api', function (RouteCollectorProxy $api) {
 
-        // Auth routes (public)
-        $api->group('/auth', function (RouteCollectorProxy $auth) {
-            $auth->post('/login', [AuthController::class, 'login']);
-        });
+        // ── Public ──────────────────────────────────────────────────────────
+        $api->post('/auth/login', [AuthController::class, 'login']);
 
-        // Protected routes
+        // ── Protected ───────────────────────────────────────────────────────
         $api->group('', function (RouteCollectorProxy $protected) {
+
+            // Auth
+            $protected->get('/auth/me',       [AuthController::class, 'me']);
+            $protected->post('/auth/refresh', [AuthController::class, 'refresh']);
+            $protected->post('/auth/logout',  [AuthController::class, 'logout']);
 
             // Dashboard
             $protected->get('/dashboard/stats', [DashboardController::class, 'stats'])
                 ->add(new PermissionMiddleware('dashboard.view'));
 
-            // Auth - current user
-            $protected->get('/auth/me', [AuthController::class, 'me']);
-            $protected->post('/auth/refresh', [AuthController::class, 'refresh']);
-            $protected->post('/auth/logout', [AuthController::class, 'logout']);
-
-            // User CRUD
-            $protected->group('/users', function (RouteCollectorProxy $users) {
-                $users->get('', [UserController::class, 'index'])
-                    ->add(new PermissionMiddleware('users.view'));
-                $users->get('/{id}', [UserController::class, 'show'])
-                    ->add(new PermissionMiddleware('users.view'));
-                $users->post('', [UserController::class, 'store'])
-                    ->add(new PermissionMiddleware('users.create'));
-                $users->put('/{id}', [UserController::class, 'update'])
-                    ->add(new PermissionMiddleware('users.update'));
-                $users->delete('/{id}', [UserController::class, 'destroy'])
-                    ->add(new PermissionMiddleware('users.delete'));
+            // Users
+            $protected->group('/users', function (RouteCollectorProxy $g) {
+                $g->get('',       [UserController::class, 'index'])->add(new PermissionMiddleware('users.view'));
+                $g->get('/{id}',  [UserController::class, 'show'])->add(new PermissionMiddleware('users.view'));
+                $g->post('',      [UserController::class, 'store'])->add(new PermissionMiddleware('users.create'));
+                $g->put('/{id}',  [UserController::class, 'update'])->add(new PermissionMiddleware('users.update'));
+                $g->delete('/{id}', [UserController::class, 'destroy'])->add(new PermissionMiddleware('users.delete'));
             });
 
-            // Level CRUD
-            $protected->group('/levels', function (RouteCollectorProxy $levels) {
-                $levels->get('', [LevelController::class, 'index'])
+            // Levels
+            $protected->group('/levels', function (RouteCollectorProxy $g) {
+                $g->get('/active', [LevelController::class, 'active'])               // ← NEW: active-only list
                     ->add(new PermissionMiddleware('levels.view'));
-                $levels->get('/{id}', [LevelController::class, 'show'])
-                    ->add(new PermissionMiddleware('levels.view'));
-                $levels->post('', [LevelController::class, 'store'])
-                    ->add(new PermissionMiddleware('levels.create'));
-                $levels->put('/{id}', [LevelController::class, 'update'])
-                    ->add(new PermissionMiddleware('levels.update'));
-                $levels->delete('/{id}', [LevelController::class, 'destroy'])
-                    ->add(new PermissionMiddleware('levels.delete'));
+                $g->get('',       [LevelController::class, 'index'])->add(new PermissionMiddleware('levels.view'));
+                $g->get('/{id}',  [LevelController::class, 'show'])->add(new PermissionMiddleware('levels.view'));
+                $g->post('',      [LevelController::class, 'store'])->add(new PermissionMiddleware('levels.create'));
+                $g->put('/{id}',  [LevelController::class, 'update'])->add(new PermissionMiddleware('levels.update'));
+                $g->delete('/{id}', [LevelController::class, 'destroy'])->add(new PermissionMiddleware('levels.delete'));
             });
 
-            // Page CRUD
-            $protected->group('/pages', function (RouteCollectorProxy $pages) {
-                $pages->get('', [PageController::class, 'index'])
-                    ->add(new PermissionMiddleware('pages.view'));
-                $pages->get('/{id}', [PageController::class, 'show'])
-                    ->add(new PermissionMiddleware('pages.view'));
-                $pages->post('', [PageController::class, 'store'])
-                    ->add(new PermissionMiddleware('pages.create'));
-                $pages->put('/{id}', [PageController::class, 'update'])
-                    ->add(new PermissionMiddleware('pages.update'));
-                $pages->delete('/{id}', [PageController::class, 'destroy'])
-                    ->add(new PermissionMiddleware('pages.delete'));
+            // Pages
+            $protected->group('/pages', function (RouteCollectorProxy $g) {
+                $g->get('/menu', [PageController::class, 'menu']);                    // ← NEW: sidebar menu
+                $g->get('',      [PageController::class, 'index'])->add(new PermissionMiddleware('pages.view'));
+                $g->get('/{id}', [PageController::class, 'show'])->add(new PermissionMiddleware('pages.view'));
+                $g->post('',     [PageController::class, 'store'])->add(new PermissionMiddleware('pages.create'));
+                $g->put('/{id}', [PageController::class, 'update'])->add(new PermissionMiddleware('pages.update'));
+                $g->delete('/{id}', [PageController::class, 'destroy'])->add(new PermissionMiddleware('pages.delete'));
             });
 
-            // Permissions
-            $protected->group('/permissions', function (RouteCollectorProxy $permission) {
-                $permission->get('', [PermissionController::class, 'allPermissions']);
-                $permission->get('/permissions/my', [PermissionController::class, 'myPermissions']);
-                $permission->get('/permissions/matrix', [PermissionController::class, 'matrix'])
+            // Permissions — FIXED: removed extra /permissions/ prefix
+            $protected->group('/permissions', function (RouteCollectorProxy $g) {
+                $g->get('',                           [PermissionController::class, 'allPermissions']);
+                $g->get('/my',                        [PermissionController::class, 'myPermissions']);
+                $g->get('/matrix',                    [PermissionController::class, 'matrix'])
                     ->add(new PermissionMiddleware('permissions.view'));
-                $permission->get('/permissions/levels/{levelId}', [PermissionController::class, 'getLevelPermissions'])
+                $g->get('/levels/{levelId}',          [PermissionController::class, 'getLevelPermissions'])
                     ->add(new PermissionMiddleware('permissions.view'));
-                $permission->put('/permissions/levels/{levelId}', [PermissionController::class, 'updateLevelPermissions'])
+                $g->put('/levels/{levelId}',          [PermissionController::class, 'updateLevelPermissions'])
                     ->add(new PermissionMiddleware('permissions.update'));
-                $permission->get('/permissions/users/{userId}', [PermissionController::class, 'getUserPermissions'])
+                $g->get('/users/{userId}',            [PermissionController::class, 'getUserPermissions'])
                     ->add(new PermissionMiddleware('permissions.view'));
-                $permission->put('/permissions/users/{userId}/additions', [PermissionController::class, 'updateUserAdditions'])
+                $g->put('/users/{userId}/additions',  [PermissionController::class, 'updateUserAdditions'])
                     ->add(new PermissionMiddleware('permissions.update'));
-                $permission->put('/permissions/users/{userId}/exclusions', [PermissionController::class, 'updateUserExclusions'])
+                $g->put('/users/{userId}/exclusions', [PermissionController::class, 'updateUserExclusions'])
                     ->add(new PermissionMiddleware('permissions.update'));
             });
         })->add(AuthMiddleware::class);

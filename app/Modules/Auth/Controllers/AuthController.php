@@ -5,9 +5,9 @@ declare(strict_types=1);
 namespace App\Modules\Auth\Controllers;
 
 use App\Modules\Auth\Services\AuthService;
+use App\Shared\ValidationException;
+use App\Shared\UnauthorizedException;
 use App\Shared\Response\JsonResponse;
-use App\Shared\Exceptions\UnauthorizedException;
-use App\Shared\Exceptions\ValidationException;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 

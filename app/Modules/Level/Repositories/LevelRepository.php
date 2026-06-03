@@ -42,10 +42,10 @@ class LevelRepository
         return [
             'data' => $stmt->fetchAll(),
             'meta' => [
-                'total' => $total,
-                'page'  => 1,
-                'limit' => $total ?: 1,
-                'pages' => 1,
+                'total'     => $total,
+                'page'      => 1,
+                'per_page'  => $total ?: 1,
+                'last_page' => 1,
             ],
         ];
     }

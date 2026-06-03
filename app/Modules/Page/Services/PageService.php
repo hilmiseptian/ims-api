@@ -5,21 +5,50 @@ declare(strict_types=1);
 namespace App\Modules\Page\Services;
 
 use App\Modules\Page\Repositories\PageRepository;
-use App\Shared\Exceptions\{ValidationException, NotFoundException, ConflictException};
+use App\Modules\Permission\Services\PermissionService;
+use App\Shared\Exceptions\{ValidationException, NotFoundException, ConflictException, ForbiddenException};
 
 class PageService
 {
-    public function __construct(private readonly PageRepository $pageRepository) {}
+    public function __construct(
+        private readonly PageRepository   $pageRepository,
+        private readonly PermissionService $permissionService
+    ) {}
 
-    public function getAll(int $page = 1, int $limit = 20, bool $activeOnly = false): array
+    public function getAll(int $page = 1, int $limit = 20, bool $activeOnly = false, string $search = ''): array
     {
-        return $this->pageRepository->findAll($activeOnly);
+        return $this->pageRepository->findAll($activeOnly, $search);
+    }
+
+    /**
+     * Returns pages the authenticated user can see in the sidebar.
+     * Builds a flat-then-nested tree.
+     */
+    public function getMenu(int $userId): array
+    {
+        $permissions = $this->permissionService->getEffectivePermissions($userId);
+        $flat        = $this->pageRepository->findMenuPages($permissions);
+
+        return $this->buildTree($flat);
+    }
+
+    private function buildTree(array $flat, ?int $parentId = null): array
+    {
+        $nodes = [];
+        foreach ($flat as $page) {
+            $pid = $page['parent_id'] !== null ? (int) $page['parent_id'] : null;
+            if ($pid === $parentId) {
+                $page['children'] = $this->buildTree($flat, (int) $page['id']);
+                $nodes[] = $page;
+            }
+        }
+        return $nodes;
     }
 
     public function getById(int $id): array
     {
         $page = $this->pageRepository->findById($id);
-        if (!$page) throw new NotFoundException("Page not found");
+        if (!$page) throw new NotFoundException('Page not found');
         return $page;
     }
 
@@ -32,14 +61,13 @@ class PageService
             throw new ConflictException('Route path already exists');
         }
 
-        $data['is_active'] = $data['is_active'] ?? true;
         return $this->pageRepository->create($data);
     }
 
     public function update(int $id, array $data): array
     {
         $page = $this->pageRepository->findById($id);
-        if (!$page) throw new NotFoundException("Page not found");
+        if (!$page) throw new NotFoundException('Page not found');
 
         $errors = $this->validate($data, true);
         if (!empty($errors)) throw new ValidationException($errors);
@@ -48,13 +76,23 @@ class PageService
             throw new ConflictException('Route path already exists');
         }
 
+        // System pages: block changing route_path
+        if ($page['is_system'] && isset($data['route_path']) && $data['route_path'] !== $page['route_path']) {
+            throw new ForbiddenException('Cannot change route_path of a system page');
+        }
+
         return $this->pageRepository->update($id, $data);
     }
 
     public function delete(int $id): void
     {
         $page = $this->pageRepository->findById($id);
-        if (!$page) throw new NotFoundException("Page not found");
+        if (!$page) throw new NotFoundException('Page not found');
+
+        if ($page['is_system']) {
+            throw new ForbiddenException('System pages cannot be deleted');
+        }
+
         $this->pageRepository->delete($id);
     }
 
@@ -62,7 +100,7 @@ class PageService
     {
         $errors = [];
         if (!$partial) {
-            if (empty($data['name'])) $errors['name'] = 'Page name is required';
+            if (empty($data['name']))       $errors['name']       = 'Page name is required';
             if (empty($data['route_path'])) $errors['route_path'] = 'Route path is required';
         }
         if (isset($data['route_path']) && !preg_match('/^\/[a-zA-Z0-9\-\/_]*$/', $data['route_path'])) {

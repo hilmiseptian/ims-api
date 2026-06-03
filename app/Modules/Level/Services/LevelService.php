@@ -11,6 +11,12 @@ class LevelService
 {
     public function __construct(private readonly LevelRepository $levelRepository) {}
 
+    public function getAllActive(): array
+    {
+        $result = $this->levelRepository->findAll(activeOnly: true);
+        return $result['data'];
+    }
+
     public function getAll(bool $activeOnly = false, string $search = ''): array
     {
         return $this->levelRepository->findAll($activeOnly, $search);

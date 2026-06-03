@@ -10,9 +10,9 @@ class UserRepository
 {
     public function __construct(private readonly PDO $db) {}
 
-    public function findAll(int $page = 1, int $limit = 20, string $search = ''): array
+    public function findAll(int $page = 1, int $per_page = 20, string $search = ''): array
     {
-        $offset = ($page - 1) * $limit;
+        $offset = ($page - 1) * $per_page;
         $params = [];
         $where = '';
 
@@ -34,7 +34,7 @@ class UserRepository
         foreach ($params as $key => $val) {
             $stmt->bindValue($key, $val);
         }
-        $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+        $stmt->bindValue(':limit', $per_page, PDO::PARAM_INT);
         $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
         $stmt->execute();
 
@@ -52,8 +52,8 @@ class UserRepository
             'meta' => [
                 'total' => $total,
                 'page' => $page,
-                'limit' => $limit,
-                'pages' => (int)ceil($total / $limit),
+                'limit' => $per_page,
+                'pages' => (int)ceil($total / $per_page),
             ],
         ];
     }

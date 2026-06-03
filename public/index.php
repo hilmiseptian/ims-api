@@ -12,6 +12,10 @@ require __DIR__ . '/../vendor/autoload.php';
 $dotenv = Dotenv\Dotenv::createImmutable(__DIR__ . '/..');
 $dotenv->safeLoad();
 
+if (empty($_ENV['JWT_SECRET']) || $_ENV['JWT_SECRET'] === 'default-secret') {
+    throw new \RuntimeException('JWT_SECRET must be set to a strong value in .env');
+}
+
 // Build DI Container
 $containerBuilder = new ContainerBuilder();
 $containerBuilder->addDefinitions(__DIR__ . '/../config/container.php');

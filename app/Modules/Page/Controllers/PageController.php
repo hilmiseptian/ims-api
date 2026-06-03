@@ -14,6 +14,13 @@ class PageController
 {
     public function __construct(private readonly PageService $pageService) {}
 
+    public function menu(ServerRequestInterface $request, ResponseInterface $response): ResponseInterface
+    {
+        $user = $request->getAttribute('auth_user');
+        $tree = $this->pageService->getMenu((int) $user['id']);
+        return JsonResponse::success($response, $tree, 'Menu retrieved');
+    }
+
     public function index(ServerRequestInterface $request, ResponseInterface $response): ResponseInterface
     {
         $params = $request->getQueryParams();
@@ -63,10 +70,13 @@ class PageController
     public function destroy(ServerRequestInterface $request, ResponseInterface $response, array $args): ResponseInterface
     {
         try {
-            $this->pageService->delete((int)$args['id']);
+            $this->pageService->delete((int) $args['id']);
             return JsonResponse::success($response, null, 'Page deleted');
         } catch (NotFoundException $e) {
             return JsonResponse::notFound($response, $e->getMessage());
+        } catch (ForbiddenException $e) {
+            return JsonResponse::forbidden($response);  // 403 for system pages
+
         }
     }
 }
